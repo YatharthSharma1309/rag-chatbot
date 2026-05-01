@@ -1,13 +1,4 @@
-import { getOpenAI, EMBEDDING_MODEL } from "./openai";
-
-/**
- * Split text into overlapping chunks suitable for embedding.
- *
- * Strategy: paragraph-aware sliding window.
- *  - Target ~1000 characters per chunk (~250 tokens)
- *  - 200 char overlap so context spans chunk boundaries
- *  - Prefer breaking on paragraph / sentence boundaries
- */
+import { getEmbeddingClient, EMBEDDING_MODEL } from "./openai";
 export function chunkText(
   text: string,
   opts: { chunkSize?: number; overlap?: number } = {},
@@ -65,7 +56,7 @@ export async function embedChunks(chunks: string[]): Promise<number[][]> {
 
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const res = await getOpenAI().embeddings.create({
+    const res = await getEmbeddingClient().embeddings.create({
       model: EMBEDDING_MODEL,
       input: batch,
     });
@@ -74,16 +65,21 @@ export async function embedChunks(chunks: string[]): Promise<number[][]> {
     }
   }
 
+  if (allEmbeddings.length !== chunks.length) {
+    throw new Error(
+      `Embedding count mismatch: expected ${chunks.length}, got ${allEmbeddings.length}`,
+    );
+  }
+
   return allEmbeddings;
 }
-
-/**
- * Embed a single query string (for vector search at chat time).
- */
 export async function embedQuery(query: string): Promise<number[]> {
-  const res = await getOpenAI().embeddings.create({
+  const res = await getEmbeddingClient().embeddings.create({
     model: EMBEDDING_MODEL,
     input: query,
   });
+  if (!res.data?.[0]?.embedding) {
+    throw new Error("No embedding returned from OpenAI");
+  }
   return res.data[0].embedding;
 }

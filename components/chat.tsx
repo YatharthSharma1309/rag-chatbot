@@ -1,21 +1,31 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { Send, Loader2, MessageSquare } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Send, Loader2, MessageSquare, Trash2, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageBubble, ChatMessage } from "@/components/message";
 
+const FALLBACK_PROMPTS = [
+  "Summarize the key points",
+  "What are the main conclusions?",
+  "List any figures, tables, or statistics",
+];
+
 interface ChatProps {
   documentId: string | null;
   filename: string | null;
+  apiKey: string | null;
+  /** AI-generated starters from /api/summary; mixed with fallbacks when short */
+  starterQuestions?: string[];
 }
 
-export function Chat({ documentId, filename }: ChatProps) {
+export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedTx, setCopiedTx] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,16 +37,16 @@ export function Chat({ documentId, filename }: ChatProps) {
   useEffect(() => {
     setMessages([]);
     setError(null);
+    setCopiedTx(false);
   }, [documentId]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || busy) return;
+  async function send(text: string) {
+    if (!text.trim() || busy) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: text.trim(),
     };
     const assistantId = crypto.randomUUID();
     const assistantMsg: ChatMessage = {
@@ -45,16 +55,18 @@ export function Chat({ documentId, filename }: ChatProps) {
       content: "",
     };
 
-    const next = [...messages, userMsg, assistantMsg];
-    setMessages(next);
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput("");
     setBusy(true);
     setError(null);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (apiKey) headers["x-openrouter-key"] = apiKey;
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           messages: [...messages, userMsg].map(({ role, content }) => ({ role, content })),
           documentId,
@@ -86,8 +98,41 @@ export function Chat({ documentId, filename }: ChatProps) {
     }
   }
 
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    await send(input);
+  }
+
   const truncatedName =
     filename && filename.length > 42 ? `${filename.slice(0, 39)}…` : filename;
+
+  const promptChips = useMemo(() => {
+    const merged = [...starterQuestions];
+    for (const p of FALLBACK_PROMPTS) {
+      if (merged.length >= 5) break;
+      if (!merged.some((x) => x.toLowerCase() === p.toLowerCase())) merged.push(p);
+    }
+    return merged.slice(0, 5);
+  }, [starterQuestions]);
+
+  function clearChat() {
+    setMessages([]);
+    setError(null);
+  }
+
+  function copyTranscript() {
+    if (messages.length === 0) return;
+    const lines = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => {
+        const label = m.role === "user" ? "You" : "Assistant";
+        return `**${label}**\n${m.content}`;
+      });
+    void navigator.clipboard.writeText(lines.join("\n\n---\n\n")).then(() => {
+      setCopiedTx(true);
+      setTimeout(() => setCopiedTx(false), 2000);
+    });
+  }
 
   return (
     <div className="flex h-[min(600px,calc(100vh-14rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/90 shadow-xl shadow-black/20 ring-1 ring-white/[0.04] backdrop-blur-sm">
@@ -106,10 +151,38 @@ export function Chat({ documentId, filename }: ChatProps) {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
                 </span>
-                Indexed · answers use your document context
+                Grounded chat · citations like [#1] map to retrieved chunks
               </p>
             )}
           </div>
+          {documentId && (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={copyTranscript}
+                disabled={messages.length === 0 || busy}
+                title={copiedTx ? "Copied" : "Copy full transcript"}
+              >
+                <ClipboardList className="mr-1 h-3.5 w-3.5" aria-hidden />
+                {copiedTx ? "Copied" : "Copy"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
+                onClick={clearChat}
+                disabled={messages.length === 0 || busy}
+                title="Clear conversation"
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden />
+                Clear
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -124,9 +197,26 @@ export function Chat({ documentId, filename }: ChatProps) {
             </p>
             <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
               {documentId
-                ? "Try summarizing key points, clarifying definitions, or citing specific sections."
+                ? "Try one of these or ask anything about the document."
                 : "Drop a PDF on the left to index it. Chat stays scoped to that file."}
             </p>
+            {documentId && (
+              <div className="mt-4 flex w-full max-w-xs flex-col gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/90">
+                  Suggested questions
+                </p>
+                {promptChips.map((prompt, i) => (
+                  <button
+                    key={`${i}-${prompt.slice(0, 48)}`}
+                    onClick={() => send(prompt)}
+                    disabled={busy}
+                    className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {messages.map((m) => (

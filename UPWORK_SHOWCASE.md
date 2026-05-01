@@ -17,7 +17,7 @@ Production-grade RAG chatbot. Upload a PDF, ask questions, get streamed answers 
 I built a full-stack AI document chatbot that lets users upload a PDF and chat with its contents. The system extracts text, chunks it intelligently, embeds each chunk with OpenAI's `text-embedding-3-small`, and stores the vectors in Supabase pgvector. When a user asks a question, the app embeds the query, runs a cosine-similarity search, builds a RAG prompt with the top-5 chunks, and streams the GPT-4o-mini response back to the browser token-by-token.
 
 **Live demo:** [your-app.vercel.app]
-**Source code:** [github.com/yourname/rag-chatbot]
+**Source code:** [github.com/YatharthSharma1309/rag-chatbot](https://github.com/YatharthSharma1309/rag-chatbot)
 
 ### Tech I used
 - **Next.js 14** (App Router, Server Actions, Route Handlers)
@@ -50,7 +50,7 @@ Vercel, Full Stack Development, AI Chatbot
 
 ## Cover letter snippet (paste when applying for AI/RAG gigs)
 
-> I recently built and shipped a production-style RAG chatbot — Next.js 14, OpenAI embeddings, Supabase pgvector, streaming GPT-4o-mini responses with source citations. Live demo: [your-url]. Source: [your-repo]. Happy to walk you through the architecture or adapt it to your use case (private docs, custom auth, multi-tenant, etc.).
+> I recently built and shipped a production-style RAG chatbot — Next.js 14, OpenAI embeddings, Supabase pgvector, streaming GPT-4o-mini responses with source citations. Live demo: [your-url]. Source: https://github.com/YatharthSharma1309/rag-chatbot. Happy to walk you through the architecture or adapt it to your use case (private docs, custom auth, multi-tenant, etc.).
 
 ## README screenshot/video tips for the GitHub repo
 

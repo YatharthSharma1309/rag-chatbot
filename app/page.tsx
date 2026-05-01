@@ -1,14 +1,72 @@
 "use client";
 
-import { useState } from "react";
-import { Github, FileText, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Github, FileText, Sparkles, Library } from "lucide-react";
 import { PdfUpload, UploadedDoc } from "@/components/upload";
 import { Chat } from "@/components/chat";
+import { ApiKeyInput, useApiKey } from "@/components/api-key-input";
+import { DocumentBrief } from "@/components/document-brief";
 
 const STACK = ["Next.js 14", "OpenAI", "Supabase pgvector", "Streaming"];
 
 export default function HomePage() {
   const [doc, setDoc] = useState<UploadedDoc | null>(null);
+  const { apiKey, saveKey, clearKey } = useApiKey();
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefSummary, setBriefSummary] = useState<string | null>(null);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [starterQuestions, setStarterQuestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!doc?.documentId) {
+      setBriefSummary(null);
+      setBriefError(null);
+      setStarterQuestions([]);
+      setBriefLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setBriefLoading(true);
+    setBriefError(null);
+    setBriefSummary(null);
+    setStarterQuestions([]);
+
+    (async () => {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (apiKey) headers["x-openrouter-key"] = apiKey;
+        const res = await fetch("/api/summary", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ documentId: doc.documentId }),
+        });
+        const json = (await res.json()) as {
+          summary?: string;
+          questions?: string[];
+          error?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          setBriefError(json.error ?? "Could not generate a brief for this document.");
+          return;
+        }
+        setBriefSummary(json.summary ?? null);
+        setStarterQuestions(Array.isArray(json.questions) ? json.questions : []);
+      } catch {
+        if (!cancelled)
+          setBriefError("Brief request failed. You can still chat — try your own questions.");
+      } finally {
+        if (!cancelled) setBriefLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [doc?.documentId, apiKey]);
 
   return (
     <main className="relative min-h-screen">
@@ -23,7 +81,7 @@ export default function HomePage() {
             <div className="leading-tight">
               <span className="font-semibold tracking-tight">RAG Chatbot</span>
               <span className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
-                Retrieval-augmented Q&amp;A on your PDFs
+                NotebookLM-style sources + grounded chat (BYO API key)
               </span>
             </div>
           </div>
@@ -49,7 +107,7 @@ export default function HomePage() {
             Chat with your documents
           </h1>
           <p className="animate-fade-in mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground opacity-0 [animation-delay:140ms] [animation-fill-mode:forwards] sm:text-base">
-            Upload a PDF, we chunk and embed it into Supabase. Ask questions and get grounded replies with inline citations — streamed token by token.
+            Like NotebookLM, one active source drives the thread — plus an auto brief, embedding-aware suggested questions, and optional OpenRouter keys stored only in your browser.
           </p>
           <ul className="animate-fade-in mt-7 flex flex-wrap items-center justify-center gap-2 opacity-0 [animation-delay:200ms] [animation-fill-mode:forwards]">
             {STACK.map((label) => (
@@ -71,12 +129,23 @@ export default function HomePage() {
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-[0_0_20px_-4px_hsl(var(--primary)/0.55)]">
                 1
               </span>
-              <div>
-                <h2 className="text-sm font-semibold tracking-tight">Upload</h2>
-                <p className="text-xs text-muted-foreground">PDF · up to 25 MB · text layer required</p>
+              <div className="flex items-start gap-2">
+                <Library className="mt-0.5 hidden h-4 w-4 shrink-0 text-primary sm:block" aria-hidden />
+                <div>
+                  <h2 className="text-sm font-semibold tracking-tight">Sources</h2>
+                  <p className="text-xs text-muted-foreground">Upload · brief · starters (NotebookLM-inspired)</p>
+                </div>
               </div>
             </div>
+            <ApiKeyInput apiKey={apiKey} onSave={saveKey} onClear={clearKey} />
             <PdfUpload onUploaded={setDoc} />
+            {(doc?.documentId || briefLoading) && (
+              <DocumentBrief
+                loading={briefLoading}
+                summary={briefSummary}
+                error={briefError && !briefLoading ? briefError : null}
+              />
+            )}
           </div>
 
           <div className="space-y-4 lg:pt-0">
@@ -85,11 +154,16 @@ export default function HomePage() {
                 2
               </span>
               <div>
-                <h2 className="text-sm font-semibold tracking-tight">Chat</h2>
-                <p className="text-xs text-muted-foreground">Questions scoped to your uploaded file</p>
+                <h2 className="text-sm font-semibold tracking-tight">Studio</h2>
+                <p className="text-xs text-muted-foreground">Streamed answers · copy transcript · clear thread</p>
               </div>
             </div>
-            <Chat documentId={doc?.documentId ?? null} filename={doc?.filename ?? null} />
+            <Chat
+              documentId={doc?.documentId ?? null}
+              filename={doc?.filename ?? null}
+              apiKey={apiKey}
+              starterQuestions={starterQuestions}
+            />
           </div>
         </div>
       </section>

@@ -17,13 +17,13 @@ create table if not exists public.documents (
 );
 
 -- 3. Chunks table — one row per text chunk + embedding
--- text-embedding-3-small produces 1536-dimension vectors
+-- jina-embeddings-v2-base-en produces 768-dimension vectors (free via Jina AI)
 create table if not exists public.document_chunks (
   id           bigserial primary key,
   document_id  uuid not null references public.documents(id) on delete cascade,
   chunk_index  int not null,
   content      text not null,
-  embedding    vector(1536) not null,
+  embedding    vector(768) not null,
   created_at   timestamptz not null default now()
 );
 
@@ -39,8 +39,9 @@ create index if not exists document_chunks_document_id_idx
 
 -- 5. RPC for similarity search
 -- Called from /api/chat with the user's query embedding.
+-- security definer + search_path = '' prevents search-path injection.
 create or replace function public.match_document_chunks(
-  query_embedding vector(1536),
+  query_embedding vector(768),
   match_count int default 5,
   filter_document_id uuid default null
 )
@@ -52,6 +53,8 @@ returns table (
   similarity float
 )
 language plpgsql
+security definer
+set search_path = ''
 as $$
 begin
   return query
@@ -68,8 +71,8 @@ begin
 end;
 $$;
 
--- 6. (Optional) Row-level security
--- The app uses the service-role key, which bypasses RLS, so this is here
--- as a starting point if you later add user auth and want per-user docs.
--- alter table public.documents       enable row level security;
--- alter table public.document_chunks enable row level security;
+-- 6. Row-level security
+-- Service-role key (used server-side) bypasses RLS.
+-- RLS blocks direct anon/authenticated access to the tables.
+alter table public.documents        enable row level security;
+alter table public.document_chunks  enable row level security;

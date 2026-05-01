@@ -37,3 +37,18 @@ next-env.d.ts
 # IDE
 .vscode/
 .idea/
+
+# Cursor / local MCP artifacts
+.playwright-mcp/
+
+# Claude Code
+.claude/
+.mcp.json
+
+# Personal/meta files
+UPWORK_SHOWCASE.md
+
+# Supabase CLI local dev (not needed for hosted Supabase)
+supabase/config.toml
+supabase/.gitignore
+supabase/.temp/

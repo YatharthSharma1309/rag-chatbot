@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { OpenAIStream, StreamingTextResponse } from "ai";
-import { getOpenAI, CHAT_MODEL } from "@/lib/openai";
+import OpenAI from "openai";
+import { getChatClient, CHAT_MODEL } from "@/lib/openai";
 import { embedQuery } from "@/lib/embeddings";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
@@ -44,6 +44,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (messages.length > 50) {
+      return new Response(JSON.stringify({ error: "Too many messages (max 50)" }), {
+        status: 400,
+      });
+    }
+
+    for (const m of messages) {
+      if (typeof m.content === "string" && m.content.length > 4000) {
+        return new Response(JSON.stringify({ error: "Message too long (max 4000 chars)" }), {
+          status: 400,
+        });
+      }
+    }
+
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (!lastUser) {
       return new Response(JSON.stringify({ error: "No user message" }), {
@@ -83,19 +97,48 @@ export async function POST(req: NextRequest) {
       content: `${SYSTEM_PROMPT}\n\nCONTEXT:\n${contextBlock}`,
     };
 
-    // 4. Stream the chat completion
-    const response = await getOpenAI().chat.completions.create({
+    // 4. Resolve chat client — prefer user-supplied key over server key
+    const userKey = req.headers.get("x-openrouter-key")?.trim();
+    const chatClient = userKey
+      ? new OpenAI({
+          apiKey: userKey,
+          baseURL: "https://openrouter.ai/api/v1",
+          defaultHeaders: {
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "RAG Chatbot",
+          },
+        })
+      : getChatClient();
+
+    // 5. Stream the chat completion
+    const response = await chatClient.chat.completions.create({
       model: CHAT_MODEL,
       stream: true,
       temperature: 0.2,
       messages: [systemMessage, ...messages.filter((m) => m.role !== "system")],
     });
 
-    // OpenAI SDK stream chunks diverge slightly from `ai`'s union typing (Azure vs OpenAI).
-    const stream = OpenAIStream(response as Parameters<typeof OpenAIStream>[0]);
-    return new StreamingTextResponse(stream);
+    // Stream plain text so the client can read raw bytes directly
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of response) {
+          const text = chunk.choices[0]?.delta?.content ?? "";
+          if (text) controller.enqueue(encoder.encode(text));
+        }
+        controller.close();
+      },
+    });
+    return new Response(readable, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : JSON.stringify(err);
     console.error("[/api/chat] error:", err);
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }

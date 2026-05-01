@@ -125,7 +125,15 @@ export function PdfUpload({ onUploaded }: UploadProps) {
       {status === "error" && error && (
         <div className="flex items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm ring-1 ring-destructive/10">
           <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
-          <p className="text-destructive">{error}</p>
+          <div className="flex-1">
+            <p className="text-destructive">{error}</p>
+            <button
+              onClick={() => { setStatus("idle"); setError(null); }}
+              className="mt-2 text-xs text-destructive/70 underline underline-offset-2 hover:text-destructive"
+            >
+              Try another file
+            </button>
+          </div>
         </div>
       )}
     </div>
