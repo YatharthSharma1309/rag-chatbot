@@ -6,6 +6,7 @@ import { PdfUpload, UploadedDoc } from "@/components/upload";
 import { Chat } from "@/components/chat";
 import { ApiKeyInput, useApiKey } from "@/components/api-key-input";
 import { DocumentBrief } from "@/components/document-brief";
+import { StudyPackExport } from "@/components/study-export";
 
 const STACK = ["Next.js 14", "OpenAI", "Supabase pgvector", "Streaming"];
 
@@ -107,7 +108,7 @@ export default function HomePage() {
             Chat with your documents
           </h1>
           <p className="animate-fade-in mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground opacity-0 [animation-delay:140ms] [animation-fill-mode:forwards] sm:text-base">
-            Like NotebookLM, one active source drives the thread — plus an auto brief, embedding-aware suggested questions, and optional OpenRouter keys stored only in your browser.
+            Like NotebookLM, one active source drives the thread — plus an auto brief, study-pack Markdown export, embedding-aware starters, and optional OpenRouter keys stored only in your browser.
           </p>
           <ul className="animate-fade-in mt-7 flex flex-wrap items-center justify-center gap-2 opacity-0 [animation-delay:200ms] [animation-fill-mode:forwards]">
             {STACK.map((label) => (
@@ -133,7 +134,7 @@ export default function HomePage() {
                 <Library className="mt-0.5 hidden h-4 w-4 shrink-0 text-primary sm:block" aria-hidden />
                 <div>
                   <h2 className="text-sm font-semibold tracking-tight">Sources</h2>
-                  <p className="text-xs text-muted-foreground">Upload · brief · starters (NotebookLM-inspired)</p>
+                  <p className="text-xs text-muted-foreground">Upload · brief · study export · starters</p>
                 </div>
               </div>
             </div>
@@ -146,6 +147,7 @@ export default function HomePage() {
                 error={briefError && !briefLoading ? briefError : null}
               />
             )}
+            <StudyPackExport documentId={doc?.documentId ?? null} filename={doc?.filename ?? null} apiKey={apiKey} />
           </div>
 
           <div className="space-y-4 lg:pt-0">
@@ -155,7 +157,7 @@ export default function HomePage() {
               </span>
               <div>
                 <h2 className="text-sm font-semibold tracking-tight">Studio</h2>
-                <p className="text-xs text-muted-foreground">Streamed answers · copy transcript · clear thread</p>
+                <p className="text-xs text-muted-foreground">Streamed answers · citations drawer · transcript tools</p>
               </div>
             </div>
             <Chat
