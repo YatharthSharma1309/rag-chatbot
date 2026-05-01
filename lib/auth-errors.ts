@@ -6,6 +6,8 @@ export function formatAuthError(err: unknown): string {
     if (m.includes("email not confirmed"))
       return "Confirm your email first (check inbox), then sign in.";
     if (m.includes("user already registered")) return "That email already has an account — sign in instead.";
+    if (m.includes("already registered")) return "That email already has an account — sign in instead.";
+    if (m.includes("already been registered")) return "That email already has an account — sign in instead.";
     if (m.includes("password")) return err.message;
     return err.message;
   }

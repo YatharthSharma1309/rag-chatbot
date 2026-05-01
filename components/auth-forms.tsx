@@ -24,10 +24,10 @@ export function AuthForms() {
     setMessage(null);
     try {
       const supabase = createBrowserSupabaseClient();
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const authCallback = `${origin}/auth/callback?next=/`;
-
       if (mode === "register") {
+        const origin = window.location.origin;
+        const authCallback = `${origin}/auth/callback?next=/`;
+
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -36,13 +36,6 @@ export function AuthForms() {
           },
         });
         if (error) throw error;
-
-        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-          setMessage("That email is already registered — switch to Sign in.");
-          setMode("login");
-          setBusy(false);
-          return;
-        }
 
         if (data.session) {
           router.refresh();
@@ -239,11 +232,11 @@ export function AuthForms() {
             </div>
           ) : (
             <div>
-              <label htmlFor="auth-password" className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="auth-password-register" className="text-xs font-medium text-muted-foreground">
                 Password
               </label>
               <Input
-                id="auth-password"
+                id="auth-password-register"
                 type="password"
                 autoComplete="new-password"
                 required
