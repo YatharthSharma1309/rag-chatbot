@@ -1,13 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { formatAuthError } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export function AuthForms() {
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,11 +24,36 @@ export function AuthForms() {
     setMessage(null);
     try {
       const supabase = createBrowserSupabaseClient();
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const authCallback = `${origin}/auth/callback?next=/`;
+
       if (mode === "register") {
-        const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: authCallback,
+          },
+        });
         if (error) throw error;
+
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setMessage("That email is already registered — switch to Sign in.");
+          setMode("login");
+          setBusy(false);
+          return;
+        }
+
+        if (data.session) {
+          router.refresh();
+          setPassword("");
+          setMessage(null);
+          setBusy(false);
+          return;
+        }
+
         setMessage(
-          "Account created. If email confirmation is enabled in Supabase, check your inbox — then sign in.",
+          "Check your email to confirm your account (Supabase sends a link). Then sign in here.",
         );
         setMode("login");
       } else {
@@ -34,9 +62,11 @@ export function AuthForms() {
           password,
         });
         if (error) throw error;
+        router.refresh();
+        setPassword("");
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Something went wrong");
+      setMessage(formatAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -61,7 +91,7 @@ export function AuthForms() {
       setMessage("Check your email for a reset link (valid for a limited time).");
       setForgotOpen(false);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Could not send reset email");
+      setMessage(formatAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -73,15 +103,21 @@ export function AuthForms() {
     try {
       const supabase = createBrowserSupabaseClient();
       const redirectTo = `${window.location.origin}/auth/callback?next=/`;
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
+          skipBrowserRedirect: true,
         },
       });
       if (error) throw error;
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      throw new Error("Google sign-in did not return a redirect URL — enable Google in Supabase Auth.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Google sign-in failed");
+      setMessage(formatAuthError(err));
       setBusy(false);
     }
   }
