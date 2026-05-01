@@ -21,7 +21,7 @@ export default function HomePage() {
             </span>
           </div>
           <a
-            href="https://github.com"
+            href="https://github.com/YatharthSharma1309/rag-chatbot"
             target="_blank"
             rel="noreferrer"
             className="text-muted-foreground hover:text-foreground transition-colors"
