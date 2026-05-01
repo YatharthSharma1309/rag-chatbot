@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import OpenAI from "openai";
-import { getChatClient, CHAT_MODEL } from "@/lib/openai";
+import { getAuthenticatedUserId } from "@/lib/auth-api";
+import { assertDocumentOwnedByUser } from "@/lib/document-access";
+import { loadUserLlmCredentials, createUserOpenRouterClient } from "@/lib/user-llm";
 import {
   matchChunksForDocumentQuery,
   buildContextBlockFromMatches,
@@ -30,15 +31,26 @@ RULES:
 /**
  * POST /api/chat
  *
- * Body: { messages: ChatMessage[], documentId?: string }
+ * Body: { messages: ChatMessage[], documentId: string }
  *
- * Performs vector search against the most recent user message, builds a
- * RAG-augmented prompt, and streams the assistant's response.
+ * Requires Supabase session. Uses the signed-in user's stored OpenRouter key and model.
+ * documentId must belong to the user.
  */
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
+
     const body = (await req.json()) as ChatBody;
     const { messages, documentId } = body;
+
+    if (!documentId?.trim()) {
+      return new Response(JSON.stringify({ error: "documentId required" }), { status: 400 });
+    }
+
+    const docId = documentId.trim();
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
@@ -67,9 +79,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 1–2. Embed + vector-search (shared with /api/chunks-preview for citation inspector)
-    const matches = await matchChunksForDocumentQuery(lastUser.content, documentId ?? null);
+    try {
+      await assertDocumentOwnedByUser(docId, userId);
+    } catch {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    }
 
+    const matches = await matchChunksForDocumentQuery(lastUser.content, docId);
     const contextBlock = buildContextBlockFromMatches(matches);
 
     const systemMessage: ChatMessage = {
@@ -77,28 +93,25 @@ export async function POST(req: NextRequest) {
       content: `${SYSTEM_PROMPT}\n\nCONTEXT:\n${contextBlock}`,
     };
 
-    // 4. Resolve chat client — prefer user-supplied key over server key
-    const userKey = req.headers.get("x-openrouter-key")?.trim();
-    const chatClient = userKey
-      ? new OpenAI({
-          apiKey: userKey,
-          baseURL: "https://openrouter.ai/api/v1",
-          defaultHeaders: {
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "RAG Chatbot",
-          },
-        })
-      : getChatClient();
+    const creds = await loadUserLlmCredentials(userId);
+    if (!creds) {
+      return new Response(
+        JSON.stringify({
+          error: "Add your OpenRouter API key in AI settings before chatting.",
+        }),
+        { status: 400 },
+      );
+    }
 
-    // 5. Stream the chat completion
+    const chatClient = createUserOpenRouterClient(creds.apiKey);
+
     const response = await chatClient.chat.completions.create({
-      model: CHAT_MODEL,
+      model: creds.chatModel,
       stream: true,
       temperature: 0.2,
       messages: [systemMessage, ...messages.filter((m) => m.role !== "system")],
     });
 
-    // Stream plain text so the client can read raw bytes directly
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {

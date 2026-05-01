@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { chunkText, embedChunks } from "@/lib/embeddings";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth-api";
 
 export const runtime = "nodejs"; // pdf-parse needs Node, not Edge
 export const maxDuration = 60; // seconds — allow time for embedding large PDFs
@@ -10,12 +11,18 @@ export const maxDuration = 60; // seconds — allow time for embedding large PDF
  * POST /api/upload
  *
  * Accepts a multipart form with a `file` field (PDF).
- * Extracts text, chunks it, generates embeddings, and stores them in Supabase.
- *
- * Returns: { documentId, filename, chunkCount }
+ * Requires a signed-in Supabase user — documents are scoped to that user.
  */
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Sign in required before uploading documents." },
+        { status: 401 },
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file");
 
@@ -75,6 +82,7 @@ export async function POST(req: NextRequest) {
       page_count: parsed.numpages,
       char_count: fullText.length,
       chunk_count: chunks.length,
+      user_id: userId,
     });
     if (docErr) throw docErr;
 

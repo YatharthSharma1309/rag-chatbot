@@ -76,3 +76,32 @@ $$;
 -- RLS blocks direct anon/authenticated access to the tables.
 alter table public.documents        enable row level security;
 alter table public.document_chunks  enable row level security;
+
+-- 7. Multi-tenant documents (nullable for legacy rows before auth; new uploads always set user_id)
+alter table public.documents
+  add column if not exists user_id uuid references auth.users (id) on delete cascade;
+
+create index if not exists documents_user_id_idx on public.documents (user_id);
+
+-- 8. Per-user encrypted OpenRouter key + preferred chat model (read/written via Next.js API + service role)
+create table if not exists public.user_settings (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  encrypted_openrouter_key text,
+  preferred_chat_model text not null default 'openai/gpt-oss-20b:free',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_settings enable row level security;
+
+create policy "user_settings_select_own"
+  on public.user_settings for select to authenticated
+  using (auth.uid() = user_id);
+
+create policy "user_settings_insert_own"
+  on public.user_settings for insert to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "user_settings_update_own"
+  on public.user_settings for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

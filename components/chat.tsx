@@ -24,12 +24,11 @@ const FALLBACK_PROMPTS = [
 interface ChatProps {
   documentId: string | null;
   filename: string | null;
-  apiKey: string | null;
   /** AI-generated starters from /api/summary; mixed with fallbacks when short */
   starterQuestions?: string[];
 }
 
-export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: ChatProps) {
+export function Chat({ documentId, filename, starterQuestions = [] }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,7 +102,6 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (apiKey) headers["x-openrouter-key"] = apiKey;
 
       const res = await fetch("/api/chat", {
         method: "POST",

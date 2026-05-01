@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-import { getChatClient, CHAT_MODEL } from "@/lib/openai";
+import { getAuthenticatedUserId } from "@/lib/auth-api";
+import { assertDocumentOwnedByUser } from "@/lib/document-access";
+import { loadUserLlmCredentials, createUserOpenRouterClient } from "@/lib/user-llm";
 import { embedQuery } from "@/lib/embeddings";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { STUDY_EXPORT_PROMPT } from "@/lib/study-export-prompt";
@@ -14,9 +15,30 @@ const STUDY_CHUNK_QUERY =
 
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { documentId } = (await req.json()) as { documentId?: string };
     if (!documentId?.trim()) {
       return NextResponse.json({ error: "documentId required" }, { status: 400 });
+    }
+
+    const docId = documentId.trim();
+
+    try {
+      await assertDocumentOwnedByUser(docId, userId);
+    } catch {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const creds = await loadUserLlmCredentials(userId);
+    if (!creds) {
+      return NextResponse.json(
+        { error: "Add your OpenRouter API key in AI settings first." },
+        { status: 400 },
+      );
     }
 
     const supabase = getSupabaseAdmin();
@@ -25,7 +47,7 @@ export async function POST(req: NextRequest) {
     const { data: chunks, error } = await supabase.rpc("match_document_chunks", {
       query_embedding: queryEmbedding,
       match_count: 12,
-      filter_document_id: documentId.trim(),
+      filter_document_id: docId,
     });
 
     if (error) throw error;
@@ -40,20 +62,10 @@ export async function POST(req: NextRequest) {
             .join("\n\n---\n\n")
         : "(no content found in vector index for this document)";
 
-    const userKey = req.headers.get("x-openrouter-key")?.trim();
-    const client = userKey
-      ? new OpenAI({
-          apiKey: userKey,
-          baseURL: "https://openrouter.ai/api/v1",
-          defaultHeaders: {
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "RAG Chatbot",
-          },
-        })
-      : getChatClient();
+    const client = createUserOpenRouterClient(creds.apiKey);
 
     const response = await client.chat.completions.create({
-      model: CHAT_MODEL,
+      model: creds.chatModel,
       temperature: 0.25,
       response_format: { type: "json_object" },
       messages: [

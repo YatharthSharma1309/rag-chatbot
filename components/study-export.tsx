@@ -8,10 +8,9 @@ import { buildStudyPackMarkdown } from "@/lib/study-export-format";
 interface StudyPackExportProps {
   documentId: string | null;
   filename: string | null;
-  apiKey: string | null;
 }
 
-export function StudyPackExport({ documentId, filename, apiKey }: StudyPackExportProps) {
+export function StudyPackExport({ documentId, filename }: StudyPackExportProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
@@ -24,7 +23,6 @@ export function StudyPackExport({ documentId, filename, apiKey }: StudyPackExpor
     setCopied(false);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (apiKey) headers["x-openrouter-key"] = apiKey;
       const res = await fetch("/api/study-export", {
         method: "POST",
         headers,
@@ -48,7 +46,7 @@ export function StudyPackExport({ documentId, filename, apiKey }: StudyPackExpor
     } finally {
       setBusy(false);
     }
-  }, [documentId, filename, apiKey]);
+  }, [documentId, filename]);
 
   const downloadMd = useCallback(() => {
     if (!markdown) return;
