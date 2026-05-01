@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import { Bot, User, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { linkifyCitationsOutsideCode } from "@/lib/citation-markdown";
 
 export interface ChatMessage {
   id: string;
@@ -28,9 +30,14 @@ function ThinkingDots() {
 export function MessageBubble({
   message,
   isThinking,
+  citationsEnabled,
+  onCitationClick,
 }: {
   message: ChatMessage;
   isThinking?: boolean;
+  /** When true, [#n] in assistant prose becomes clickable (outside fenced code). */
+  citationsEnabled?: boolean;
+  onCitationClick?: (slot: number) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -43,6 +50,47 @@ export function MessageBubble({
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  const markdownSource =
+    !isUser && citationsEnabled && message.content.trim()
+      ? linkifyCitationsOutsideCode(message.content)
+      : message.content;
+
+  const markdownComponents: Components = {
+    a({ href, children, ...props }) {
+      if (href?.startsWith("#cite-")) {
+        const slot = Number(href.slice("#cite-".length));
+        if (!citationsEnabled || !Number.isFinite(slot) || slot < 1) {
+          return <span {...props}>{children}</span>;
+        }
+        return (
+          <button
+            type="button"
+            className="mx-0.5 inline cursor-pointer rounded-md bg-primary/18 px-1.5 py-0 text-[0.8125rem] font-semibold text-primary underline-offset-2 transition-colors hover:bg-primary/28 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            title="View retrieved passage"
+            onClick={(e) => {
+              e.preventDefault();
+              onCitationClick?.(slot);
+            }}
+          >
+            {children}
+          </button>
+        );
+      }
+      const allowed =
+        href?.startsWith("http://") ||
+        href?.startsWith("https://") ||
+        href?.startsWith("mailto:");
+      if (!allowed || !href) {
+        return <span {...props}>{children}</span>;
+      }
+      return (
+        <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
+          {children}
+        </a>
+      );
+    },
+  };
 
   return (
     <div className={cn("group flex gap-3 animate-fade-in opacity-0 [animation-fill-mode:forwards]", isUser ? "justify-end" : "justify-start")}>
@@ -67,7 +115,7 @@ export function MessageBubble({
               <span className="text-xs">Thinking…</span>
             </span>
           ) : (
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{markdownSource}</ReactMarkdown>
           )}
         </div>
         {!isUser && !isThinking && message.content && (

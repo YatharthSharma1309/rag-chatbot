@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
 import { getChatClient, CHAT_MODEL } from "@/lib/openai";
-import { embedQuery } from "@/lib/embeddings";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import {
+  matchChunksForDocumentQuery,
+  buildContextBlockFromMatches,
+} from "@/lib/rag-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -65,32 +67,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 1. Embed the user's question
-    const queryEmbedding = await embedQuery(lastUser.content);
+    // 1–2. Embed + vector-search (shared with /api/chunks-preview for citation inspector)
+    const matches = await matchChunksForDocumentQuery(lastUser.content, documentId ?? null);
 
-    // 2. Vector-search the chunks via the SQL RPC defined in supabase/schema.sql
-    const supabase = getSupabaseAdmin();
-    const { data: matches, error } = await supabase.rpc("match_document_chunks", {
-      query_embedding: queryEmbedding,
-      match_count: 5,
-      filter_document_id: documentId ?? null,
-    });
-
-    if (error) {
-      console.error("[chat] vector search error:", error);
-      throw error;
-    }
-
-    // 3. Build context block
-    const contextBlock =
-      matches && matches.length > 0
-        ? matches
-            .map(
-              (m: { chunk_index: number; content: string; similarity: number }, i: number) =>
-                `[#${i + 1}] (chunk ${m.chunk_index}, similarity ${m.similarity.toFixed(3)})\n${m.content}`,
-            )
-            .join("\n\n---\n\n")
-        : "(no matching context found — answer from general knowledge but tell the user no document context was found)";
+    const contextBlock = buildContextBlockFromMatches(matches);
 
     const systemMessage: ChatMessage = {
       role: "system",

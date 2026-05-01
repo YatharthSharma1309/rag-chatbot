@@ -5,6 +5,15 @@ import { Send, Loader2, MessageSquare, Trash2, ClipboardList } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageBubble, ChatMessage } from "@/components/message";
+import { CitationDrawer, type CitationDrawerState } from "@/components/citation-drawer";
+import type { MatchedChunk } from "@/lib/rag-context";
+
+function precedingUserContent(messages: ChatMessage[], assistantIndex: number): string | null {
+  for (let i = assistantIndex - 1; i >= 0; i--) {
+    if (messages[i].role === "user") return messages[i].content;
+  }
+  return null;
+}
 
 const FALLBACK_PROMPTS = [
   "Summarize the key points",
@@ -26,7 +35,9 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedTx, setCopiedTx] = useState(false);
+  const [drawer, setDrawer] = useState<CitationDrawerState>({ open: false });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chunksCacheRef = useRef<Map<string, MatchedChunk[]>>(new Map());
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -38,7 +49,37 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
     setMessages([]);
     setError(null);
     setCopiedTx(false);
+    setDrawer({ open: false });
+    chunksCacheRef.current.clear();
   }, [documentId]);
+
+  async function openCitation(slot: number, query: string | null) {
+    if (!documentId || !query?.trim()) return;
+    const cacheKey = `${documentId}\n${query}`;
+    setDrawer({ open: true, slot, loading: true, error: null, chunks: null });
+
+    const cached = chunksCacheRef.current.get(cacheKey);
+    if (cached) {
+      setDrawer({ open: true, slot, loading: false, error: null, chunks: cached });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/chunks-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId, query }),
+      });
+      const json = (await res.json()) as { chunks?: MatchedChunk[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Preview failed (${res.status})`);
+      const chunks = json.chunks ?? [];
+      chunksCacheRef.current.set(cacheKey, chunks);
+      setDrawer({ open: true, slot, loading: false, error: null, chunks });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load passage";
+      setDrawer({ open: true, slot, loading: false, error: msg, chunks: null });
+    }
+  }
 
   async function send(text: string) {
     if (!text.trim() || busy) return;
@@ -118,6 +159,7 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
   function clearChat() {
     setMessages([]);
     setError(null);
+    setDrawer({ open: false });
   }
 
   function copyTranscript() {
@@ -135,6 +177,7 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
   }
 
   return (
+    <>
     <div className="flex h-[min(600px,calc(100vh-14rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/90 shadow-xl shadow-black/20 ring-1 ring-white/[0.04] backdrop-blur-sm">
       <div className="border-b border-border/70 bg-muted/25 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
@@ -151,7 +194,7 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
                 </span>
-                Grounded chat · citations like [#1] map to retrieved chunks
+                Tap [#1], [#2]… to open the source passage · same retrieval as the model
               </p>
             )}
           </div>
@@ -219,13 +262,24 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
             )}
           </div>
         )}
-        {messages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            isThinking={m.role === "assistant" && busy && m.content === ""}
-          />
-        ))}
+        {messages.map((m, idx) => {
+          const priorUser = m.role === "assistant" ? precedingUserContent(messages, idx) : null;
+          const citationsReady =
+            !!documentId &&
+            m.role === "assistant" &&
+            !!priorUser?.trim() &&
+            !!m.content.trim();
+
+          return (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              isThinking={m.role === "assistant" && busy && m.content === ""}
+              citationsEnabled={citationsReady}
+              onCitationClick={(slot) => openCitation(slot, priorUser)}
+            />
+          );
+        })}
         {error && (
           <div className="rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
             {error}
@@ -254,5 +308,7 @@ export function Chat({ documentId, filename, apiKey, starterQuestions = [] }: Ch
         </div>
       </form>
     </div>
+    <CitationDrawer state={drawer} onClose={() => setDrawer({ open: false })} />
+    </>
   );
 }
