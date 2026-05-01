@@ -8,6 +8,7 @@ import { DocumentBrief } from "@/components/document-brief";
 import { StudyPackExport } from "@/components/study-export";
 import { AuthForms } from "@/components/auth-forms";
 import { UserAiSettings } from "@/components/user-ai-settings";
+import { AuthQueryBanner } from "@/components/auth-query-banner";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 
@@ -118,6 +119,8 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+
+      <AuthQueryBanner />
 
       {authLoading ? (
         <section className="container flex flex-col items-center justify-center py-24 text-muted-foreground">

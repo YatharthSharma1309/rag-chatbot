@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import { Download, Copy, Check, Loader2, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { buildStudyPackMarkdown } from "@/lib/study-export-format";
+import { buildStudyPackMarkdown, type StudyFlashcard } from "@/lib/study-export-format";
+import { flashcardsToCsv } from "@/lib/study-export-csv";
 
 interface StudyPackExportProps {
   documentId: string | null;
@@ -14,6 +15,7 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [flashcards, setFlashcards] = useState<StudyFlashcard[]>([]);
   const [copied, setCopied] = useState(false);
 
   const generate = useCallback(async () => {
@@ -21,6 +23,7 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
     setBusy(true);
     setError(null);
     setCopied(false);
+    setFlashcards([]);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       const res = await fetch("/api/study-export", {
@@ -34,14 +37,17 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
         error?: string;
       };
       if (!res.ok) throw new Error(json.error ?? `Study export failed (${res.status})`);
+      const cards = Array.isArray(json.flashcards) ? json.flashcards : [];
       const md = buildStudyPackMarkdown({
         sourceTitle: filename ?? "Uploaded PDF",
         outline: json.outline ?? "",
-        flashcards: Array.isArray(json.flashcards) ? json.flashcards : [],
+        flashcards: cards,
       });
       setMarkdown(md);
+      setFlashcards(cards);
     } catch (e) {
       setMarkdown(null);
+      setFlashcards([]);
       setError(e instanceof Error ? e.message : "Study export failed");
     } finally {
       setBusy(false);
@@ -70,6 +76,21 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
     });
   }, [markdown]);
 
+  const downloadCsv = useCallback(() => {
+    if (flashcards.length === 0) return;
+    const base =
+      (filename ?? "document").replace(/\.pdf$/i, "").replace(/[^\w\-]+/g, "-").slice(0, 72) ||
+      "study-pack";
+    const csv = flashcardsToCsv(flashcards);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${base}-flashcards.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [flashcards, filename]);
+
   if (!documentId) return null;
 
   return (
@@ -79,7 +100,7 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
         Study pack export
       </div>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Generate a Markdown outline + flashcards from the same embedding retrieval pipeline as summaries — useful for revision or importing into Anki (manual import).
+        Useful for revision — Markdown for notes, CSV columns `front` / `back` for Anki import.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -116,6 +137,10 @@ export function StudyPackExport({ documentId, filename }: StudyPackExportProps) 
                   Copy Markdown
                 </>
               )}
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-9 text-xs" onClick={downloadCsv} disabled={flashcards.length === 0}>
+              <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Download CSV
             </Button>
             <Button type="button" size="sm" variant="outline" className="h-9 text-xs" onClick={downloadMd}>
               <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
