@@ -56,52 +56,75 @@ export function PdfUpload({ onUploaded }: UploadProps) {
   });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div
         {...getRootProps()}
         className={cn(
-          "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
+          "group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed transition-all duration-200",
           isDragActive
-            ? "border-primary bg-accent"
-            : "border-border hover:border-primary/50 hover:bg-accent/50",
-          status === "uploading" && "pointer-events-none opacity-60",
+            ? "border-primary bg-primary/10 shadow-[0_0_32px_-8px_hsl(var(--primary)/0.45)]"
+            : "border-border/90 bg-card/90 hover:border-primary/45 hover:bg-accent/30",
+          status === "uploading" && "pointer-events-none opacity-75",
         )}
       >
         <input {...getInputProps()} />
-        {status === "uploading" ? (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <p className="text-sm">Extracting, chunking, and embedding…</p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <UploadIcon className="h-8 w-8" />
-            <p className="text-sm font-medium text-foreground">
-              {isDragActive ? "Drop the PDF here" : "Drag a PDF here, or click to select"}
-            </p>
-            <p className="text-xs">Up to 25 MB · text-based PDFs (no OCR)</p>
-          </div>
+        {status === "uploading" && (
+          <div
+            className="pointer-events-none absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"
+            aria-hidden
+          />
         )}
+        <div className="relative px-8 py-12 text-center">
+          {status === "uploading" ? (
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
+              <div>
+                <p className="text-sm font-medium text-foreground">Processing your PDF</p>
+                <p className="mt-1 text-xs text-muted-foreground">Extract → chunk → embed → store</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-14 w-14 items-center justify-center rounded-2xl ring-1 transition-colors",
+                  isDragActive ? "bg-primary/20 ring-primary/30" : "bg-muted/80 ring-border group-hover:bg-accent",
+                )}
+              >
+                <UploadIcon
+                  className={cn("h-7 w-7 transition-colors", isDragActive ? "text-primary" : "text-muted-foreground")}
+                  aria-hidden
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {isDragActive ? "Drop to upload" : "Drag PDF here or click to browse"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Max 25 MB · needs selectable text (no OCR)</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {status === "done" && doc && (
-        <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="font-medium flex items-center gap-1.5">
-              <FileText className="h-4 w-4" />
-              {doc.filename}
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.08] px-4 py-3 text-sm shadow-sm ring-1 ring-emerald-500/15">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 font-medium">
+              <FileText className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+              <span className="truncate">{doc.filename}</span>
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {doc.pageCount} pages · {doc.chunkCount} chunks indexed · ready to chat
+            <p className="mt-1 text-xs text-muted-foreground">
+              {doc.pageCount} pages · {doc.chunkCount} chunks · ready to chat
             </p>
           </div>
         </div>
       )}
 
       {status === "error" && error && (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
-          <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm ring-1 ring-destructive/10">
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
           <p className="text-destructive">{error}</p>
         </div>
       )}

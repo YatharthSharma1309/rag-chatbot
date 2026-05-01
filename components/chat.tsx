@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageBubble, ChatMessage } from "@/components/message";
@@ -18,14 +18,12 @@ export function Chat({ documentId, filename }: ChatProps) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll on new content
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Reset chat when a new document is uploaded
   useEffect(() => {
     setMessages([]);
     setError(null);
@@ -68,7 +66,6 @@ export function Chat({ documentId, filename }: ChatProps) {
         throw new Error(errPayload.error || `Chat failed (${res.status})`);
       }
 
-      // Stream the assistant response
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let acc = "";
@@ -83,58 +80,88 @@ export function Chat({ documentId, filename }: ChatProps) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setError(msg);
-      // Remove the empty assistant placeholder
       setMessages((prev) => prev.filter((m) => m.id !== assistantId));
     } finally {
       setBusy(false);
     }
   }
 
+  const truncatedName =
+    filename && filename.length > 42 ? `${filename.slice(0, 39)}…` : filename;
+
   return (
-    <div className="flex flex-col h-[600px] rounded-lg border bg-card">
-      {/* Header */}
-      <div className="border-b px-4 py-3">
-        <div className="text-sm font-medium">
-          {filename ? `Chatting with: ${filename}` : "Chat"}
-        </div>
-        {!documentId && (
-          <div className="text-xs text-muted-foreground mt-0.5">
-            Upload a PDF to start asking questions
+    <div className="flex h-[min(600px,calc(100vh-14rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border/80 bg-card/90 shadow-xl shadow-black/20 ring-1 ring-white/[0.04] backdrop-blur-sm">
+      <div className="border-b border-border/70 bg-muted/25 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <MessageSquare className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+              <span className="truncate">{truncatedName ?? "Assistant"}</span>
+            </div>
+            {!documentId ? (
+              <p className="mt-1 text-xs text-muted-foreground">Upload a PDF to unlock questions.</p>
+            ) : (
+              <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+                Indexed · answers use your document context
+              </p>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <div className="h-full flex items-center justify-center text-center text-sm text-muted-foreground px-8">
-            {documentId
-              ? "Ask anything about your document. Try: “Summarize the key points” or “What does the document say about X?”"
-              : "No document loaded yet."}
+          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/80 ring-1 ring-border">
+              <MessageSquare className="h-7 w-7 text-muted-foreground" aria-hidden />
+            </div>
+            <p className="max-w-[260px] text-sm font-medium text-foreground">
+              {documentId ? "Ask your first question" : "Waiting for a document"}
+            </p>
+            <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
+              {documentId
+                ? "Try summarizing key points, clarifying definitions, or citing specific sections."
+                : "Drop a PDF on the left to index it. Chat stays scoped to that file."}
+            </p>
           </div>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble
+            key={m.id}
+            message={m}
+            isThinking={m.role === "assistant" && busy && m.content === ""}
+          />
         ))}
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
             {error}
           </div>
         )}
       </div>
 
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="border-t p-3 flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={documentId ? "Ask a question…" : "Upload a PDF first"}
-          disabled={!documentId || busy}
-          autoFocus
-        />
-        <Button type="submit" disabled={!documentId || busy || !input.trim()} size="icon">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
+      <form onSubmit={handleSubmit} className="border-t border-border/70 bg-muted/15 p-3">
+        <div className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={documentId ? "Ask anything about this PDF…" : "Upload a PDF first"}
+            disabled={!documentId || busy}
+            className="h-11 border-border/80 bg-background/80 shadow-inner"
+            autoFocus
+          />
+          <Button
+            type="submit"
+            disabled={!documentId || busy || !input.trim()}
+            size="icon"
+            className="h-11 w-11 shrink-0 shadow-md shadow-primary/15"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
       </form>
     </div>
   );

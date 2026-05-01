@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { OpenAIStream, StreamingTextResponse } from "ai";
-import { openai, CHAT_MODEL } from "@/lib/openai";
+import { getOpenAI, CHAT_MODEL } from "@/lib/openai";
 import { embedQuery } from "@/lib/embeddings";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     };
 
     // 4. Stream the chat completion
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: CHAT_MODEL,
       stream: true,
       temperature: 0.2,

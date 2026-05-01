@@ -1,14 +1,23 @@
 import OpenAI from "openai";
 
-if (!process.env.OPENAI_API_KEY) {
-  // Don't throw at import time so `next build` works without env vars.
-  // The error will surface clearly on the first API call instead.
-  console.warn("[openai] OPENAI_API_KEY is not set — set it in .env.local");
-}
+let client: OpenAI | null = null;
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+/**
+ * Lazily creates the OpenAI client so `next build` can load route modules
+ * without OPENAI_API_KEY (newer SDK throws if apiKey is missing at construct time).
+ */
+export function getOpenAI(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey?.trim()) {
+    throw new Error(
+      "OPENAI_API_KEY is not set — add it to .env.local (required for embeddings and chat).",
+    );
+  }
+  if (!client) {
+    client = new OpenAI({ apiKey });
+  }
+  return client;
+}
 
 export const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini";
 export const EMBEDDING_MODEL =

@@ -1,4 +1,4 @@
-import { openai, EMBEDDING_MODEL } from "./openai";
+import { getOpenAI, EMBEDDING_MODEL } from "./openai";
 
 /**
  * Split text into overlapping chunks suitable for embedding.
@@ -65,7 +65,7 @@ export async function embedChunks(chunks: string[]): Promise<number[][]> {
 
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const res = await openai.embeddings.create({
+    const res = await getOpenAI().embeddings.create({
       model: EMBEDDING_MODEL,
       input: batch,
     });
@@ -81,7 +81,7 @@ export async function embedChunks(chunks: string[]): Promise<number[][]> {
  * Embed a single query string (for vector search at chat time).
  */
 export async function embedQuery(query: string): Promise<number[]> {
-  const res = await openai.embeddings.create({
+  const res = await getOpenAI().embeddings.create({
     model: EMBEDDING_MODEL,
     input: query,
   });
