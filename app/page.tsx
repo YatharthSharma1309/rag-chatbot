@@ -135,7 +135,10 @@ export default function HomePage() {
                 <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
                 Sign in to upload PDFs and run RAG chat
               </div>
-              <h1 className="animate-fade-in bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-3xl font-bold tracking-tight text-transparent opacity-0 [animation-delay:80ms] [animation-fill-mode:forwards] sm:text-4xl">
+              <h1
+                className="animate-fade-in bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-3xl font-bold tracking-tight text-transparent opacity-0 [animation-delay:80ms] [animation-fill-mode:forwards] sm:text-4xl"
+                aria-label="Chat with your documents"
+              >
                 Chat with your documents
               </h1>
               <p className="animate-fade-in mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground opacity-0 [animation-delay:140ms] [animation-fill-mode:forwards] sm:text-base">
@@ -155,7 +158,10 @@ export default function HomePage() {
                 <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
                 Embeddings + vector search + streamed answers
               </div>
-              <h1 className="animate-fade-in bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-3xl font-bold tracking-tight text-transparent opacity-0 [animation-delay:80ms] [animation-fill-mode:forwards] sm:text-4xl md:text-[2.65rem] md:leading-[1.15]">
+              <h1
+                className="animate-fade-in bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-3xl font-bold tracking-tight text-transparent opacity-0 [animation-delay:80ms] [animation-fill-mode:forwards] sm:text-4xl md:text-[2.65rem] md:leading-[1.15]"
+                aria-label="Chat with your documents"
+              >
                 Chat with your documents
               </h1>
               <p className="animate-fade-in mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground opacity-0 [animation-delay:140ms] [animation-fill-mode:forwards] sm:text-base">

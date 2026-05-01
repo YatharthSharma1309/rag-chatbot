@@ -4,6 +4,10 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { encryptOpenRouterKey } from "@/lib/crypto-user-settings";
 import { isValidOpenRouterModelId } from "@/lib/openrouter-models";
 import { CHAT_MODEL } from "@/lib/openai";
+import {
+  isMissingUserSettingsTable,
+  USER_SETTINGS_SETUP_INSTRUCTIONS,
+} from "@/lib/postgrest-errors";
 
 export const runtime = "nodejs";
 
@@ -35,6 +39,14 @@ export async function GET() {
       .eq("user_id", user.id)
       .maybeSingle();
 
+    if (error && isMissingUserSettingsTable(error)) {
+      return NextResponse.json({
+        preferredChatModel: CHAT_MODEL,
+        hasOpenRouterKey: false,
+        databaseSetupRequired: true,
+        setupHint: USER_SETTINGS_SETUP_INSTRUCTIONS,
+      });
+    }
     if (error) throw error;
 
     return NextResponse.json({
@@ -70,11 +82,19 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = getSupabaseAdmin();
-    const { data: existing } = await admin
+    const { data: existing, error: existingErr } = await admin
       .from("user_settings")
       .select("encrypted_openrouter_key")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    if (existingErr && isMissingUserSettingsTable(existingErr)) {
+      return NextResponse.json(
+        { error: USER_SETTINGS_SETUP_INSTRUCTIONS, databaseSetupRequired: true },
+        { status: 503 },
+      );
+    }
+    if (existingErr) throw existingErr;
 
     let encrypted: string | null = existing?.encrypted_openrouter_key ?? null;
 
@@ -98,6 +118,12 @@ export async function POST(req: NextRequest) {
       { onConflict: "user_id" },
     );
 
+    if (upsertErr && isMissingUserSettingsTable(upsertErr)) {
+      return NextResponse.json(
+        { error: USER_SETTINGS_SETUP_INSTRUCTIONS, databaseSetupRequired: true },
+        { status: 503 },
+      );
+    }
     if (upsertErr) throw upsertErr;
 
     return NextResponse.json({

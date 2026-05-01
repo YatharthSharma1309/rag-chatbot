@@ -2,6 +2,10 @@ import OpenAI from "openai";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { decryptOpenRouterKey } from "@/lib/crypto-user-settings";
 import { CHAT_MODEL as DEFAULT_CHAT_MODEL } from "@/lib/openai";
+import {
+  isMissingUserSettingsTable,
+  USER_SETTINGS_SETUP_INSTRUCTIONS,
+} from "@/lib/postgrest-errors";
 
 export type UserLlmCredentials = {
   apiKey: string;
@@ -16,7 +20,12 @@ export async function loadUserLlmCredentials(userId: string): Promise<UserLlmCre
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (isMissingUserSettingsTable(error)) {
+      throw new Error(USER_SETTINGS_SETUP_INSTRUCTIONS);
+    }
+    throw error;
+  }
   if (!data?.encrypted_openrouter_key) return null;
 
   let apiKey: string;

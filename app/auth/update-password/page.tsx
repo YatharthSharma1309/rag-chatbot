@@ -4,12 +4,14 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Lock } from "lucide-react";
-import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { createBrowserSupabaseClient, isBrowserSupabaseConfigured } from "@/lib/supabase/browser";
+import { SupabaseEnvMissingCard } from "@/components/supabase-env-missing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
+  const configured = isBrowserSupabaseConfigured();
   const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -17,6 +19,7 @@ export default function UpdatePasswordPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (!configured) return;
     let cancelled = false;
     (async () => {
       try {
@@ -37,7 +40,7 @@ export default function UpdatePasswordPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, configured]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -62,6 +65,14 @@ export default function UpdatePasswordPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!configured) {
+    return (
+      <main className="container max-w-md py-16">
+        <SupabaseEnvMissingCard />
+      </main>
+    );
   }
 
   if (!ready) {

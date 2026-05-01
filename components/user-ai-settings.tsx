@@ -17,17 +17,26 @@ export function UserAiSettings() {
   const [showKey, setShowKey] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [setupHint, setSetupHint] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
       const res = await fetch("/api/user/settings");
-      const json = (await res.json()) as { preferredChatModel?: string; hasOpenRouterKey?: boolean; error?: string };
+      const json = (await res.json()) as {
+        preferredChatModel?: string;
+        hasOpenRouterKey?: boolean;
+        databaseSetupRequired?: boolean;
+        setupHint?: string;
+        error?: string;
+      };
       if (!res.ok) throw new Error(json.error ?? "Could not load settings");
       if (json.preferredChatModel) setModel(json.preferredChatModel);
       setHasStoredKey(!!json.hasOpenRouterKey);
+      setSetupHint(json.databaseSetupRequired && json.setupHint ? json.setupHint : null);
     } catch (e) {
+      setSetupHint(null);
       setErr(e instanceof Error ? e.message : "Load failed");
     } finally {
       setLoading(false);
@@ -95,6 +104,11 @@ export function UserAiSettings() {
         </div>
       ) : (
         <form className="space-y-4 px-4 py-4" onSubmit={handleSave}>
+          {setupHint && (
+            <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+              {setupHint}
+            </p>
+          )}
           <div>
             <label htmlFor="chat-model" className="text-xs font-medium text-muted-foreground">
               Chat model (OpenRouter id)

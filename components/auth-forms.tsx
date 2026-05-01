@@ -3,25 +3,49 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
-import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { createBrowserSupabaseClient, isBrowserSupabaseConfigured } from "@/lib/supabase/browser";
+import { SupabaseEnvMissingCard } from "@/components/supabase-env-missing";
 import { formatAuthError } from "@/lib/auth-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+function validateEmail(emailTrim: string): string | null {
+  if (!emailTrim) return "Enter your email.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim))
+    return "Enter a valid email address.";
+  return null;
+}
+
+function validateEmailPassword(emailTrim: string, password: string): string | null {
+  const emailErr = validateEmail(emailTrim);
+  if (emailErr) return emailErr;
+  if (!password) return "Enter your password.";
+  if (password.length < 6) return "Password must be at least 6 characters.";
+  return null;
+}
+
+type Feedback = { text: string; variant: "info" | "error" };
 
 export function AuthForms() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const trimmed = email.trim();
+    const validationErr = validateEmailPassword(trimmed, password);
+    if (validationErr) {
+      setFeedback({ text: validationErr, variant: "error" });
+      return;
+    }
     setBusy(true);
-    setMessage(null);
+    setFeedback(null);
     try {
       const supabase = createBrowserSupabaseClient();
       if (mode === "register") {
@@ -29,7 +53,7 @@ export function AuthForms() {
         const authCallback = `${origin}/auth/callback?next=/`;
 
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: trimmed,
           password,
           options: {
             emailRedirectTo: authCallback,
@@ -38,28 +62,29 @@ export function AuthForms() {
         if (error) throw error;
 
         if (data.session) {
-          router.refresh();
+          await router.refresh();
           setPassword("");
-          setMessage(null);
+          setFeedback(null);
           setBusy(false);
           return;
         }
 
-        setMessage(
-          "Check your email to confirm your account (Supabase sends a link). Then sign in here.",
-        );
+        setFeedback({
+          text: "Check your email to confirm your account (Supabase sends a link). Then sign in here.",
+          variant: "info",
+        });
         setMode("login");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: trimmed,
           password,
         });
         if (error) throw error;
-        router.refresh();
+        await router.refresh();
         setPassword("");
       }
     } catch (err) {
-      setMessage(formatAuthError(err));
+      setFeedback({ text: formatAuthError(err), variant: "error" });
     } finally {
       setBusy(false);
     }
@@ -67,52 +92,55 @@ export function AuthForms() {
 
   async function handleResetLink(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim()) {
-      setMessage("Enter your email above first.");
+    const trimmed = email.trim();
+    const emailErr = validateEmail(trimmed);
+    if (emailErr) {
+      setFeedback({ text: emailErr, variant: "error" });
       return;
     }
     setBusy(true);
-    setMessage(null);
+    setFeedback(null);
     try {
       const supabase = createBrowserSupabaseClient();
       const origin = window.location.origin;
       const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/auth/update-password")}`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
         redirectTo,
       });
       if (error) throw error;
-      setMessage("Check your email for a reset link (valid for a limited time).");
+      setFeedback({
+        text: "Check your email for a reset link (valid for a limited time).",
+        variant: "info",
+      });
       setForgotOpen(false);
     } catch (err) {
-      setMessage(formatAuthError(err));
+      setFeedback({ text: formatAuthError(err), variant: "error" });
     } finally {
       setBusy(false);
     }
   }
 
+  /*
   async function handleGoogle() {
     setBusy(true);
-    setMessage(null);
+    setFeedback(null);
     try {
       const supabase = createBrowserSupabaseClient();
       const redirectTo = `${window.location.origin}/auth/callback?next=/`;
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+        options: { redirectTo },
       });
       if (error) throw error;
-      if (data.url) {
-        window.location.assign(data.url);
-        return;
-      }
-      throw new Error("Google sign-in did not return a redirect URL — enable Google in Supabase Auth.");
     } catch (err) {
-      setMessage(formatAuthError(err));
+      setFeedback({ text: formatAuthError(err), variant: "error" });
       setBusy(false);
     }
+  }
+  */
+
+  if (!isBrowserSupabaseConfigured()) {
+    return <SupabaseEnvMissingCard />;
   }
 
   return (
@@ -126,7 +154,7 @@ export function AuthForms() {
           )}
           onClick={() => {
             setMode("login");
-            setMessage(null);
+            setFeedback(null);
             setForgotOpen(false);
           }}
         >
@@ -141,7 +169,7 @@ export function AuthForms() {
           )}
           onClick={() => {
             setMode("register");
-            setMessage(null);
+            setFeedback(null);
             setForgotOpen(false);
           }}
         >
@@ -150,6 +178,7 @@ export function AuthForms() {
         </button>
       </div>
 
+      {/*
       <Button
         type="button"
         variant="outline"
@@ -183,9 +212,10 @@ export function AuthForms() {
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">or email</span>
         <span className="h-px flex-1 bg-border" />
       </div>
+      */}
 
       {!forgotOpen ? (
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="mt-5 space-y-4" noValidate onSubmit={handleSubmit}>
           <div>
             <label htmlFor="auth-email" className="text-xs font-medium text-muted-foreground">
               Email
@@ -194,7 +224,6 @@ export function AuthForms() {
               id="auth-email"
               type="email"
               autoComplete="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1.5 h-10 border-border/80 bg-background/80"
@@ -212,7 +241,7 @@ export function AuthForms() {
                   className="text-[11px] text-primary underline-offset-2 hover:underline"
                   onClick={() => {
                     setForgotOpen(true);
-                    setMessage(null);
+                    setFeedback(null);
                   }}
                 >
                   Forgot password?
@@ -222,8 +251,6 @@ export function AuthForms() {
                 id="auth-password"
                 type="password"
                 autoComplete="current-password"
-                required
-                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1.5 h-10 border-border/80 bg-background/80"
@@ -239,8 +266,6 @@ export function AuthForms() {
                 id="auth-password-register"
                 type="password"
                 autoComplete="new-password"
-                required
-                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1.5 h-10 border-border/80 bg-background/80"
@@ -249,9 +274,17 @@ export function AuthForms() {
             </div>
           )}
 
-          {message && (
-            <p className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              {message}
+          {feedback && (
+            <p
+              role={feedback.variant === "error" ? "alert" : "status"}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+                feedback.variant === "error"
+                  ? "border-destructive/45 bg-destructive/10 text-destructive"
+                  : "border-border/70 bg-muted/30 text-muted-foreground",
+              )}
+            >
+              {feedback.text}
             </p>
           )}
 
@@ -269,7 +302,7 @@ export function AuthForms() {
           </Button>
         </form>
       ) : (
-        <form className="space-y-4" onSubmit={handleResetLink}>
+        <form className="mt-5 space-y-4" noValidate onSubmit={handleResetLink}>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Enter the email for your account. We&apos;ll send a link to set a new password.
           </p>
@@ -281,16 +314,23 @@ export function AuthForms() {
               id="reset-email"
               type="email"
               autoComplete="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1.5 h-10 border-border/80 bg-background/80"
               placeholder="you@example.com"
             />
           </div>
-          {message && (
-            <p className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              {message}
+          {feedback && (
+            <p
+              role={feedback.variant === "error" ? "alert" : "status"}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+                feedback.variant === "error"
+                  ? "border-destructive/45 bg-destructive/10 text-destructive"
+                  : "border-border/70 bg-muted/30 text-muted-foreground",
+              )}
+            >
+              {feedback.text}
             </p>
           )}
           <div className="flex gap-2">
